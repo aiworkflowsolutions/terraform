@@ -48,13 +48,14 @@ variable "repositories" {
 
   default = [
     {
+      repoName          = "example-fe"
+      repoType          = "fe"
+      projectName       = "example"
       orgIdentifier     = "default"
-      projectIdentifier = "IDA"
-      repoName          = "Ping"
-      repoType          = "forgeopsextras"
-      repoIdentifier    = "forgeopsextras"
+      projectIdentifier = "Example"
+      repoIdentifier    = "examplefe"
       isTemplateRepo    = false
       env               = ["dev"]
-    }   
+    }
   ]
 }
