@@ -21,7 +21,7 @@ locals {
 
   harness_repos = {
     for repo in var.repositories : repo.repoName => repo
-    if contains(["fe", "be", "keycloak", "postgres"], repo.repoType)
+    if contains(["fe", "be"], repo.repoType)
   }
 
   repo_files = flatten([
@@ -69,34 +69,7 @@ locals {
             template = "${path.module}/be/service.yaml"
             filename = "service.yaml"
           }
-        ] : (repo.repoType == "keycloak" ? [
-          {
-            file     = ".harness/pipeline.yaml"
-            template = "${path.module}/keycloak/pipeline.yaml"
-            filename = "pipeline.yaml"
-          },
-          {
-            file     = ".harness/K8s.yaml"
-            template = "${path.module}/keycloak/K8s.yaml"
-            filename = "K8s.yaml"
-          },
-          {
-            file     = ".harness/service.yaml"
-            template = "${path.module}/keycloak/service.yaml"
-            filename = "service.yaml"
-          }
-        ] : (repo.repoType == "postgres" ? [
-          {
-            file     = ".harness/K8s.yaml"
-            template = "${path.module}/postgres/K8s.yaml"
-            filename = "K8s.yaml"
-          },
-          {
-            file     = ".harness/service.yaml"
-            template = "${path.module}/postgres/service.yaml"
-            filename = "service.yaml"
-          }
-        ] : []))
+        ] : [])
       ) : {
         repoName       = repo.repoName
         repoIdentifier = replace(repo.repoName, "-", "")
@@ -144,6 +117,7 @@ resource "github_repository_file" "repo_files" {
     repoName           = each.value.repoName
     pipelineName       = each.value.repoName
     pipelineIdentifier = each.value.repoIdentifier
+    projectName        = each.value.projectName != null ? each.value.projectName : each.value.repoName
     Dockerfile         = ""
     projectIdentifier  = each.value.projectIdentifier
     orgIdentifier      = each.value.orgIdentifier
@@ -154,7 +128,7 @@ resource "github_repository_file" "repo_files" {
   depends_on = [github_repository.new_repo]
 }
 
-# ─── Harness resources (only for fe, be, keycloak, postgres) ─────────────────
+# ─── Harness resources (only for fe, be) ─────────────────────────────────────
 
 provider "harness" {
   endpoint         = "https://app.harness.io/gateway"

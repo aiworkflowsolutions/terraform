@@ -1,8 +1,8 @@
 infrastructureDefinition:
   name: K8s
   identifier: K8s
-  orgIdentifier: default
-  projectIdentifier: IDA
+  orgIdentifier: ${orgIdentifier}
+  projectIdentifier: ${projectIdentifier}
   environmentRef: Prod
   deploymentType: Kubernetes
   type: KubernetesDirect

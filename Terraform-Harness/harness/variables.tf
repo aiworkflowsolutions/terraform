@@ -37,8 +37,9 @@ variable "repositories" {
     projectIdentifier = string
     repoIdentifier    = string
     repoName          = string
+    projectName       = optional(string)
     Dockerfile        = optional(string)
-    repoType          = string # e.g., "microservice" or "library"
+    repoType          = string # e.g., "fe", "be", "helm"
     env               = optional(list(string))
     alCode            = optional(string)
     isTemplateRepo    = bool

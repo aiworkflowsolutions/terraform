@@ -1,20 +1,38 @@
 pipeline:
-  name: ${pipeline_name}
-  identifier: ${pipeline_identifier}
-  projectIdentifier: ${project_identifier}
-  orgIdentifier: ${org_identifier}
+  name: ${pipelineName}
+  identifier: ${pipelineIdentifier}
+  orgIdentifier: ${orgIdentifier}
+  projectIdentifier: ${projectIdentifier}
   tags: {}
+  delegateSelectors:
+    - kubernetes-delegate
   properties:
     ci:
       codebase:
-        connectorRef: GithubOrgLevelConnector
-        repoName: libraryManagement
+        connectorRef: account.Github
+        repoName: ${pipelineName}
         build: <+input>
+  variables:
+    - name: serviceRef
+      type: String
+      value: <+input>
+      description: "Harness service reference for deployment"
+    - name: clientBranch
+      type: String
+      value: <+input>
+      description: "Client-specific branch for postgres/keycloak helm values"
+    - name: postgresHelmRepo
+      type: String
+      value: <+input>
+      description: "GitHub repo name for postgres helm chart"
+    - name: keycloakHelmRepo
+      type: String
+      value: <+input>
+      description: "GitHub repo name for keycloak helm chart"
   stages:
     - stage:
-        name: Build
-        identifier: Build
-        description: ""
+        name: CI
+        identifier: CI
         type: CI
         spec:
           cloneCodebase: true
@@ -29,22 +47,134 @@ pipeline:
           execution:
             steps:
               - step:
+                  name: Nexus
+                  identifier: Nexus
+                  template:
+                    templateRef: Nexus
+                    versionLabel: v0.1.0
+                    gitBranch: main
+                    templateInputs:
+                      type: BuildAndPushDockerRegistry
+                      spec:
+                        tags: <+input>
+                        dockerfile: <+input>
+                        context: <+input>
+    - stage:
+        name: Deploy
+        identifier: Deploy
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          environment:
+            environmentRef: Prod
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: K8s
+          service:
+            serviceRef: <+pipeline.variables.serviceRef>
+          execution:
+            steps:
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: Deploy Postgres
+        identifier: DeployPostgres
+        description: "Helm install/upgrade postgres from client-specific branch"
+        type: CI
+        spec:
+          cloneCodebase: false
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.k8s
+              namespace: api
+              automountServiceAccountToken: true
+              os: Linux
+          execution:
+            steps:
+              - step:
+                  type: GitClone
+                  name: Checkout Postgres Helm Repo
+                  identifier: CheckoutPostgresHelmRepo
+                  spec:
+                    connectorRef: account.Github
+                    repoName: <+pipeline.variables.postgresHelmRepo>
+                    build:
+                      type: branch
+                      spec:
+                        branch: <+pipeline.variables.clientBranch>
+              - step:
                   type: Run
-                  name: Mvn
-                  identifier: Run_1
+                  name: Helm Upgrade Postgres
+                  identifier: HelmUpgradePostgres
                   spec:
                     connectorRef: account.harnessImage
-                    image: maven:3.9.9-amazoncorretto-17-al2023
+                    image: alpine/helm:latest
                     shell: Sh
                     command: |-
-                      java --version
-                      mvn clean install -DskipTests
+                      helm upgrade --install postgres ./helm-charts \
+                        --namespace api \
+                        --create-namespace \
+                        --wait \
+                        --timeout 10m
+    - stage:
+        name: Deploy Keycloak
+        identifier: DeployKeycloak
+        description: "Helm install/upgrade keycloak from client-specific branch"
+        type: CI
+        spec:
+          cloneCodebase: false
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.k8s
+              namespace: api
+              automountServiceAccountToken: true
+              os: Linux
+          execution:
+            steps:
               - step:
-                  type: BuildAndPushDockerRegistry
-                  name: BuildAndPushDockerRegistry_1
-                  identifier: BuildAndPushDockerRegistry_1
+                  type: GitClone
+                  name: Checkout Keycloak Helm Repo
+                  identifier: CheckoutKeycloakHelmRepo
+                  spec:
+                    connectorRef: account.Github
+                    repoName: <+pipeline.variables.keycloakHelmRepo>
+                    build:
+                      type: branch
+                      spec:
+                        branch: <+pipeline.variables.clientBranch>
+              - step:
+                  type: Run
+                  name: Helm Upgrade Keycloak
+                  identifier: HelmUpgradeKeycloak
                   spec:
                     connectorRef: account.harnessImage
-                    repo: gtbanf1979/maven:v1
-                    tags:
-                      - javaliblatest
+                    image: alpine/helm:latest
+                    shell: Sh
+                    command: |-
+                      helm upgrade --install keycloak ./helm-charts \
+                        --namespace api \
+                        --create-namespace \
+                        --wait \
+                        --timeout 10m

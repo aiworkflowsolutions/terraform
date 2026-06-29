@@ -1,20 +1,38 @@
 pipeline:
   name: ${pipelineName}
   identifier: ${pipelineIdentifier}
-  projectIdentifier: ${projectIdentifier}
   orgIdentifier: ${orgIdentifier}
+  projectIdentifier: ${projectIdentifier}
   tags: {}
+  delegateSelectors:
+    - kubernetes-delegate
   properties:
     ci:
       codebase:
         connectorRef: account.Github
         repoName: ${pipelineName}
         build: <+input>
+  variables:
+    - name: serviceRef
+      type: String
+      value: <+input>
+      description: "Harness service reference for deployment"
+    - name: clientBranch
+      type: String
+      value: <+input>
+      description: "Client-specific branch for postgres/keycloak helm values"
+    - name: postgresHelmRepo
+      type: String
+      value: <+input>
+      description: "GitHub repo name for postgres helm chart"
+    - name: keycloakHelmRepo
+      type: String
+      value: <+input>
+      description: "GitHub repo name for keycloak helm chart"
   stages:
     - stage:
         name: CI
         identifier: CI
-        description: ""
         type: CI
         spec:
           cloneCodebase: true
@@ -29,45 +47,134 @@ pipeline:
           execution:
             steps:
               - step:
-                  name: Git-Clone
-                  identifier: GitClone
+                  name: Nexus
+                  identifier: Nexus
                   template:
-                    templateRef: Git
-                    versionLabel: v0.1.0                    
-              - step:
-                  type: Run
-                  name: Mvn
-                  identifier: Run_1
-                  spec:
-                    connectorRef: account.harnessImage
-                    image: maven:3.9.9-amazoncorretto-17-al2023
-                    shell: Sh
-                    command: |-
-                      java --version
-                      mvn clean install -DskipTests
-              - step:
-                  name: docker
-                  identifier: docker
-                  template:
-                    templateRef: Docker
+                    templateRef: Nexus
                     versionLabel: v0.1.0
                     gitBranch: main
                     templateInputs:
                       type: BuildAndPushDockerRegistry
                       spec:
-                        tags: <+input>                    
+                        tags: <+input>
+                        dockerfile: <+input>
+                        context: <+input>
     - stage:
-        name: Approval
-        identifier: Approval
-        tags: {}
-        template:
-          templateRef: Approval
-          versionLabel: v0.1.0
-          gitBranch: main
+        name: Deploy
+        identifier: Deploy
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          environment:
+            environmentRef: Prod
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: K8s
+          service:
+            serviceRef: <+pipeline.variables.serviceRef>
+          execution:
+            steps:
+              - step:
+                  name: Rollout Deployment
+                  identifier: rolloutDeployment
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+            rollbackSteps:
+              - step:
+                  name: Rollback Rollout Deployment
+                  identifier: rollbackRolloutDeployment
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
     - stage:
-        name: K8sRollOut
-        identifier: K8sRollOut
-        tags: {}
-        template:
-          templateRef: K8sRollOut
-          versionLabel: v0.1.0          
+        name: Deploy Postgres
+        identifier: DeployPostgres
+        description: "Helm install/upgrade postgres from client-specific branch"
+        type: CI
+        spec:
+          cloneCodebase: false
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.k8s
+              namespace: api
+              automountServiceAccountToken: true
+              os: Linux
+          execution:
+            steps:
+              - step:
+                  type: GitClone
+                  name: Checkout Postgres Helm Repo
+                  identifier: CheckoutPostgresHelmRepo
+                  spec:
+                    connectorRef: account.Github
+                    repoName: <+pipeline.variables.postgresHelmRepo>
+                    build:
+                      type: branch
+                      spec:
+                        branch: <+pipeline.variables.clientBranch>
+              - step:
+                  type: Run
+                  name: Helm Upgrade Postgres
+                  identifier: HelmUpgradePostgres
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine/helm:latest
+                    shell: Sh
+                    command: |-
+                      helm upgrade --install postgres ./helm-charts \
+                        --namespace api \
+                        --create-namespace \
+                        --wait \
+                        --timeout 10m
+    - stage:
+        name: Deploy Keycloak
+        identifier: DeployKeycloak
+        description: "Helm install/upgrade keycloak from client-specific branch"
+        type: CI
+        spec:
+          cloneCodebase: false
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.k8s
+              namespace: api
+              automountServiceAccountToken: true
+              os: Linux
+          execution:
+            steps:
+              - step:
+                  type: GitClone
+                  name: Checkout Keycloak Helm Repo
+                  identifier: CheckoutKeycloakHelmRepo
+                  spec:
+                    connectorRef: account.Github
+                    repoName: <+pipeline.variables.keycloakHelmRepo>
+                    build:
+                      type: branch
+                      spec:
+                        branch: <+pipeline.variables.clientBranch>
+              - step:
+                  type: Run
+                  name: Helm Upgrade Keycloak
+                  identifier: HelmUpgradeKeycloak
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: alpine/helm:latest
+                    shell: Sh
+                    command: |-
+                      helm upgrade --install keycloak ./helm-charts \
+                        --namespace api \
+                        --create-namespace \
+                        --wait \
+                        --timeout 10m          

@@ -4,6 +4,7 @@ service:
   orgIdentifier: ${orgIdentifier}
   projectIdentifier: ${projectIdentifier}
   serviceDefinition:
+    type: Kubernetes
     spec:
       manifests:
         - manifest:
@@ -15,16 +16,13 @@ service:
                 spec:
                   connectorRef: account.Github
                   gitFetchType: Branch
-                  folderPath: "/helm-charts"
-                  repoName: helm-chart-harness
+                  repoName: helm-chart-${projectName}
+                  folderPath: /helm-charts-${projectName}
                   branch: main
-              subChartPath: ""
               valuesPaths:
-              #- manifests/${repoName}/sit/configmap/configmap.yaml
-              - manifests/${repoName}/sit/immutable/values.yaml
-              - trigger-values/<+pipeline.triggerType>/values.yaml              
-              skipResourceVersioning: false
+                - manifests/${pipelineName}/sit/immutable/values.yaml
+              subChartPath: ""
+              skipResourceVersioning: true
               enableDeclarativeRollback: false
               helmVersion: V3
               fetchHelmChartMetadata: false
-    type: Kubernetes
