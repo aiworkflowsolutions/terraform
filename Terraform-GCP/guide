@@ -1,0 +1,28 @@
+gcloud config list
+gcloud projects list
+gcloud beta billing projects describe 163011525505
+gcloud version
+gcloud services enable artifactregistry.googleapis.com
+gcloud services disable artifactregistry.googleapis.com
+gcloud config set artifacts/repository REPOSITORY
+gcloud artifacts packages list --repository=my-repo
+gcloud config set artifacts/location LOCATION
+gcloud artifacts locations list
+gcloud artifacts packages list --repository=my-repo --location=us-central1
+gcloud config unset project
+gcloud config unset artifacts/repository
+gcloud config unset artifacts/location
+gcloud config get-value project
+
+
+gcloud container clusters list 
+gcloud container node-pools list --cluster=steam-current-438516-v5-gke --region us-central1 --project steam-current-438516-v5
+gcloud container clusters resize steam-current-438516-v5-gke --node-pool default-pool --num-nodes 0 --region us-central1 --project steam-current-438516-v5
+gcloud container clusters resize steam-current-438516-v5-gke --node-pool steam-current-438516-v5-gke --num-nodes 1 --region us-central1 --project steam-current-438516-v5
+
+
+
+gcloud container node-pools list --cluster=learnk8s-cluster-prod --region europe-west1 --project steam-current-438516-v5
+
+gcloud container clusters resize learnk8s-cluster-prod --node-pool default-pool --num-nodes 0 --region europe-west1 --project steam-current-438516-v5
+gcloud container clusters resize learnk8s-cluster-prod --node-pool node-pool --num-nodes 0 --region europe-west1 --project steam-current-438516-v5

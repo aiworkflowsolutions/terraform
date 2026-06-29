@@ -1,0 +1,13 @@
+infrastructureDefinition:
+  name: K8s
+  identifier: K8s
+  orgIdentifier: default
+  projectIdentifier: IDA
+  environmentRef: Prod
+  deploymentType: Kubernetes
+  type: KubernetesDirect
+  spec:
+    connectorRef: account.k8s
+    namespace: api
+    releaseName: release-<+INFRA_KEY_SHORT_ID>
+  allowSimultaneousDeployments: false

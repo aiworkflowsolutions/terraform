@@ -1,0 +1,50 @@
+pipeline:
+  name: ${pipeline_name}
+  identifier: ${pipeline_identifier}
+  projectIdentifier: ${project_identifier}
+  orgIdentifier: ${org_identifier}
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: GithubOrgLevelConnector
+        repoName: libraryManagement
+        build: <+input>
+  stages:
+    - stage:
+        name: Build
+        identifier: Build
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.k8s
+              namespace: api
+              automountServiceAccountToken: true
+              nodeSelector: {}
+              os: Linux
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Mvn
+                  identifier: Run_1
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9.9-amazoncorretto-17-al2023
+                    shell: Sh
+                    command: |-
+                      java --version
+                      mvn clean install -DskipTests
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: BuildAndPushDockerRegistry_1
+                  identifier: BuildAndPushDockerRegistry_1
+                  spec:
+                    connectorRef: account.harnessImage
+                    repo: gtbanf1979/maven:v1
+                    tags:
+                      - javaliblatest

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      serviceAccountName: cloud-sql-access # Use the Kubernetes service account
+      containers:
+      - name: my-app
+        image: my-app-image
+        env:
+        - name: DB_HOST
+          value: "127.0.0.1" # Cloud SQL Proxy forwards to localhost
+        - name: DB_PORT
+          value: "3306"
+      - name: cloud-sql-proxy
+        image: gcr.io/cloudsql-docker/gce-proxy:1.33.2
+        command:
+        - "/cloud_sql_proxy"
+        - "-instances=gtb-gcp9ba0325a:us-central1:my-sql-instance=tcp:3306"
+        - "-credential_file=/secrets/key.json"
+        volumeMounts:
+        - name: cloudsql-credentials
+          mountPath: /secrets
+          readOnly: true
+      volumes:
+      - name: cloudsql-credentials
+        secret:
+          secretName: cloud-sql-credentials

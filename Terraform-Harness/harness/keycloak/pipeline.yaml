@@ -1,0 +1,47 @@
+pipeline:
+  name: ${pipelineName}
+  identifier: ${pipelineIdentifier}
+  projectIdentifier: ${projectIdentifier}
+  orgIdentifier: ${orgIdentifier}
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: account.Github
+        repoName: ${pipelineName}
+        build: <+input>
+  stages:
+    - stage:
+        name: CI
+        identifier: CI
+        description: ""
+        type: CI
+        spec:
+          cloneCodebase: true
+          infrastructure:
+            type: KubernetesDirect
+            spec:
+              connectorRef: account.k8s
+              namespace: api
+              automountServiceAccountToken: true
+              nodeSelector: {}
+              os: Linux
+          execution:
+            steps:                  
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Nexus
+                  identifier: BuildAndPushDockerRegistry_1
+                  spec:
+                    connectorRef: account.Nexus
+                    repo: 192.168.1.83:5000/repository/harness/client
+                    tags: <+input>
+                    dockerfile: <+input>
+                    buildArgs:
+                      APP_NAME: <+pipeline.name>
+                    envVariables:
+                      PLUGIN_SKIP_TLS_VERIFY: "true"                     
+                    resources:
+                      limits:
+                        memory: 2Gi
+                        cpu: 1

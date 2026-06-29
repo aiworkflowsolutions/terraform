@@ -1,0 +1,15 @@
+inputSet:
+  name: ${pipelineName}
+  tags: {}
+  identifier: ${pipelineIdentifier}
+  orgIdentifier: ${orgIdentifier}
+  projectIdentifier: ${projectIdentifier}
+  pipeline:
+    identifier: ${pipelineName}
+    properties:
+      ci:
+        codebase:
+          build:
+            type: PR
+            spec:
+              number: <+trigger.prNumber>
