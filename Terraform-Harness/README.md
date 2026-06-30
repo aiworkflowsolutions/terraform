@@ -14,11 +14,15 @@ For each new client, you define their repos in `config.auto.tfvars`. Terraform:
 
 ---
 
-## Client onboarding
+## Quick start
 
-### 1. Create your config
+### 1. Configure `config.auto.tfvars`
 
 ```hcl
+github_token = "ghp_your_token_here"
+
+harness_platform_api_key = "pat.KL30gt_VQXSrCQmCJxVnuw.your_pat_here"
+
 repositories = [
   {
     repoName          = "hairstudio-fe"
@@ -50,7 +54,7 @@ repositories = [
   {
     repoName          = "postgres-helm"
     repoType          = "postgres"
-    createRepo        = false
+    projectName       = "hairstudio"
     orgIdentifier     = "default"
     projectIdentifier = "Hairstudio"
     isTemplateRepo    = false
@@ -59,7 +63,7 @@ repositories = [
   {
     repoName          = "keycloak-helm"
     repoType          = "keycloak"
-    createRepo        = false
+    projectName       = "hairstudio"
     orgIdentifier     = "default"
     projectIdentifier = "Hairstudio"
     isTemplateRepo    = false
@@ -71,6 +75,7 @@ repositories = [
 ### 2. Run Terraform
 
 ```bash
+cd Terraform-Harness
 terraform init
 terraform apply
 ```
@@ -81,47 +86,33 @@ terraform apply
 
 ### Repo types
 
-| repoType | `createRepo` | Template | `.harness/` files | Harness resources |
-|----------|:------------:|----------|:-----------------:|:-----------------:|
-| **fe** | `true` (default) | `generic-repo-template` | pipeline.yaml, K8s.yaml, inputset.yaml, service.yaml | Pipeline + InputSet + PR Trigger |
-| **be** | `true` (default) | `generic-repo-template` | pipeline.yaml, K8s.yaml, inputset.yaml, service.yaml | Pipeline + InputSet + PR Trigger |
-| **helm** | `true` (default) | `generic-helm-chart-repo-template` | _(none)_ | _(none)_ |
-| **postgres** | `false` | _(repo exists)_ | _(none)_ | Pipeline + InputSet + PR Trigger |
-| **keycloak** | `false` | _(repo exists)_ | _(none)_ | Pipeline + InputSet + PR Trigger |
+| repoType | Template | `.harness/` files | Harness resources | Pipeline stages |
+|----------|----------|:-----------------:|:-----------------:|-----------------|
+| **fe** | `generic-repo-template` | pipeline.yaml, K8s.yaml, inputset.yaml, service.yaml | Pipeline + InputSet + PR Trigger | CI (Nexus) → Deploy |
+| **be** | `generic-repo-template` | pipeline.yaml, K8s.yaml, inputset.yaml, service.yaml | Pipeline + InputSet + PR Trigger | CI (Nexus) → Deploy |
+| **helm** | `generic-helm-chart-repo-template` | _(none)_ | _(none)_ | — |
+| **postgres** | `helm-chart-postgres` | pipeline.yaml, K8s.yaml, inputset.yaml, service.yaml | Pipeline + InputSet + PR Trigger | Deploy only |
+| **keycloak** | `helm-chart-keycloak` | pipeline.yaml, K8s.yaml, inputset.yaml, service.yaml | Pipeline + InputSet + PR Trigger | Deploy only |
 
 ### Example: onboarding hairstudio
 
-| Repo | Created from | Purpose |
-|------|-------------|---------|
-| `hairstudio-fe` | `generic-repo-template` | Frontend app + Harness pipeline |
-| `hairstudio-be` | `generic-repo-template` | Backend app + Harness pipeline |
-| `helm-chart-hairstudio` | `generic-helm-chart-repo-template` | Helm chart repo (one per client) |
-| `postgres-helm` | _(already exists)_ | Pipeline imported into client's Harness project |
-| `keycloak-helm` | _(already exists)_ | Pipeline imported into client's Harness project |
+| Repo | Template | Purpose |
+|------|----------|---------|
+| `hairstudio-fe` | `generic-repo-template` | Frontend app pipeline |
+| `hairstudio-be` | `generic-repo-template` | Backend app pipeline |
+| `helm-chart-hairstudio` | `generic-helm-chart-repo-template` | Helm chart storage (no pipeline) |
+| `postgres-helm` | `helm-chart-postgres` | Postgres infra pipeline |
+| `keycloak-helm` | `helm-chart-keycloak` | Keycloak infra pipeline |
 
 ### Harness project
 
-Each client gets their **own Harness project** (e.g. `Hairstudio`) — fully isolated from other clients.
-
----
-
-## Pipeline stages
-
-**fe pipeline:** `CI (Nexus build & push Docker)` → `Deploy (K8s rolling deploy)`
-
-**be pipeline:** `CI (Nexus build & push Docker)` → `Deploy (K8s rolling deploy)`
-
-### Runtime variables (set when running a pipeline)
-
-| Variable | Example | Description |
-|----------|---------|-------------|
-| `serviceRef` | `hairstudiofe` | Harness service to deploy |
+Each client gets their **own Harness project** (e.g. `Hairstudio`), auto-created by Terraform.
 
 ---
 
 ## How services link to helm charts
 
-The `projectName` field determines the helm chart repo referenced in the service definitions:
+The `projectName` field drives the helm chart repo name in service definitions:
 
 ```yaml
 # hairstudio-fe/.harness/service.yaml
@@ -132,11 +123,17 @@ valuesPaths:
 ```
 
 ```yaml
-# hairstudio-be/.harness/service.yaml
-repoName: helm-chart-hairstudio        # ← same repo
-folderPath: /helm-charts-hairstudio
-valuesPaths:
-  - manifests/hairstudio-be/sit/immutable/values.yaml
+# postgres-helm/.harness/service.yaml
+repoName: postgres-helm                # ← own repo name
+folderPath: /postgres                  # ← chart subdirectory
+valuesPaths: []                        # ← uses chart's built-in values.yaml
+```
+
+```yaml
+# keycloak-helm/.harness/service.yaml
+repoName: keycloak-helm                # ← own repo name
+folderPath: ""                         # ← chart at root
+valuesPaths: []                        # ← uses chart's built-in values.yaml
 ```
 
 ---
@@ -149,21 +146,33 @@ valuesPaths:
 | `repoType` | ✅ | — | One of: `fe`, `be`, `helm`, `postgres`, `keycloak` |
 | `orgIdentifier` | ✅ | — | Harness org (usually `default`) |
 | `projectIdentifier` | ✅ | — | Harness project (e.g. `Hairstudio`) |
-| `projectName` | ❌ | `repoName` | Shared name used for helm chart repo |
-| `createRepo` | ❌ | `true` | Set `false` for existing repos (postgres, keycloak) |
+| `projectName` | ❌ | `repoName` | Shared project name for helm chart naming |
 | `isTemplateRepo` | ✅ | — | Whether this is a template repo |
 | `env` | ❌ | `[]` | Environment list (`dev`, `stg`, `prd`) |
+
+### Config file variables (in `config.auto.tfvars`)
+
+| Variable | Description |
+|----------|-------------|
+| `github_token` | GitHub PAT with repo & template permissions |
+| `harness_platform_api_key` | Harness PAT for API access |
 
 ---
 
 ## Prerequisites
 
-- **GitHub token** with repo & template permissions in `config.auto.tfvars`:
-  ```hcl
-  github_token = "ghp_your_token_here"
-  ```
-- **Harness account** configured in the `provider "harness"` block in `repos.tf`
-- **Existing repos** (postgres, keycloak) must already have `.harness/pipeline.yaml` and `.harness/inputset.yaml` committed
-- **Template repos** must exist in the GitHub org:
-  - `aiworkflowsolutions/generic-repo-template` (for fe, be repos)
-  - `aiworkflowsolutions/generic-helm-chart-repo-template` (for helm repos)
+### GitHub templates
+These repos must exist in `github.com/aiworkflowsolutions/`:
+- `generic-repo-template` — for fe, be repos
+- `generic-helm-chart-repo-template` — for helm chart repos
+- `helm-chart-postgres` — for postgres infra repos (set as template repo)
+- `helm-chart-keycloak` — for keycloak infra repos (set as template repo)
+
+### Harness account
+- Account ID is configured in the `provider "harness"` block in `repos.tf`
+- Generate a PAT at: Harness → Account Settings → Access Control → API Keys
+
+### Per-client setup after onboarding
+Each new repo created from `helm-chart-postgres` or `helm-chart-keycloak` needs:
+1. Update `values.yaml` — search for `myproject` and replace with client name
+2. Commit and push to the client's branch
