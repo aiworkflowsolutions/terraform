@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "../generic-helm-chart-repo-template"
+		},
+		{
+			"path": "../helm-chart-postgres"
+		},
+		{
+			"path": "../helm-chart-keycloak"
 		}
 	],
 	"settings": {}
