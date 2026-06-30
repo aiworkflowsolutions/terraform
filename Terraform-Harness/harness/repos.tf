@@ -112,7 +112,7 @@ locals {
             template = "${path.module}/keycloak/service.yaml"
             filename = "service.yaml"
           }
-        ] : []))
+        ] : [])))
       ) : {
         repoName       = repo.repoName
         repoIdentifier = replace(repo.repoName, "-", "")
