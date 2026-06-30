@@ -1,0 +1,27 @@
+service:
+  name: ${pipelineName}
+  identifier: ${pipelineIdentifier}
+  orgIdentifier: ${orgIdentifier}
+  projectIdentifier: ${projectIdentifier}
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: INT
+            type: HelmChart
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: account.Github
+                  gitFetchType: Branch
+                  repoName: ${pipelineName}
+                  folderPath: /postgres
+                  branch: main
+              valuesPaths: []
+              subChartPath: ""
+              skipResourceVersioning: true
+              enableDeclarativeRollback: false
+              helmVersion: V3
+              fetchHelmChartMetadata: false

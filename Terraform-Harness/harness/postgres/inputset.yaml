@@ -1,0 +1,8 @@
+inputSet:
+  name: ${pipelineName}
+  tags: {}
+  identifier: ${pipelineIdentifier}
+  orgIdentifier: ${orgIdentifier}
+  projectIdentifier: ${projectIdentifier}
+  pipeline:
+    identifier: ${pipelineName}

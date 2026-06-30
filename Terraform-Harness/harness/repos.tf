@@ -19,16 +19,10 @@ locals {
     if repo.repoType == "helm"
   }
 
-  # New repos (fe, be) — create repo + push .harness files + import pipeline
+  # Repos that get full Harness setup (fe, be, postgres, keycloak)
   new_repos = {
     for repo in var.repositories : repo.repoName => repo
-    if contains(["fe", "be"], repo.repoType)
-  }
-
-  # Existing repos (postgres, keycloak) — import pipeline only, no repo creation
-  existing_repos = {
-    for repo in var.repositories : repo.repoName => repo
-    if contains(["postgres", "keycloak"], repo.repoType)
+    if contains(["fe", "be", "postgres", "keycloak"], repo.repoType)
   }
 
   repo_files = flatten([
@@ -76,7 +70,49 @@ locals {
             template = "${path.module}/be/service.yaml"
             filename = "service.yaml"
           }
-        ] : [])
+        ] : (repo.repoType == "postgres" ? [
+          {
+            file     = ".harness/pipeline.yaml"
+            template = "${path.module}/postgres/pipeline.yaml"
+            filename = "pipeline.yaml"
+          },
+          {
+            file     = ".harness/K8s.yaml"
+            template = "${path.module}/postgres/K8s.yaml"
+            filename = "K8s.yaml"
+          },
+          {
+            file     = ".harness/inputset.yaml"
+            template = "${path.module}/postgres/inputset.yaml"
+            filename = "inputset.yaml"
+          },
+          {
+            file     = ".harness/service.yaml"
+            template = "${path.module}/postgres/service.yaml"
+            filename = "service.yaml"
+          }
+        ] : (repo.repoType == "keycloak" ? [
+          {
+            file     = ".harness/pipeline.yaml"
+            template = "${path.module}/keycloak/pipeline.yaml"
+            filename = "pipeline.yaml"
+          },
+          {
+            file     = ".harness/K8s.yaml"
+            template = "${path.module}/keycloak/K8s.yaml"
+            filename = "K8s.yaml"
+          },
+          {
+            file     = ".harness/inputset.yaml"
+            template = "${path.module}/keycloak/inputset.yaml"
+            filename = "inputset.yaml"
+          },
+          {
+            file     = ".harness/service.yaml"
+            template = "${path.module}/keycloak/service.yaml"
+            filename = "service.yaml"
+          }
+        ] : []))
       ) : {
         repoName       = repo.repoName
         repoIdentifier = replace(repo.repoName, "-", "")
@@ -110,7 +146,7 @@ resource "github_repository" "new_repo" {
 
   template {
     owner      = var.github_owner
-    repository = each.value.repoType == "helm" ? "generic-helm-chart-repo-template" : "generic-repo-template"
+    repository = each.value.repoType == "helm" ? "generic-helm-chart-repo-template" : each.value.repoType == "postgres" ? "helm-chart-postgres" : each.value.repoType == "keycloak" ? "helm-chart-keycloak" : "generic-repo-template"
   }
 }
 
@@ -193,57 +229,9 @@ resource "harness_platform_pipeline" "pipeline" {
   }
 }
 
-# Existing repos (postgres, keycloak) — import pipeline without repo creation
-resource "harness_platform_pipeline" "existing_pipeline" {
-  for_each = local.existing_repos
-  depends_on = [harness_platform_project.project]
-
-  identifier      = replace(each.value.repoName, "-", "")
-  org_id          = each.value.orgIdentifier
-  project_id      = each.value.projectIdentifier
-  name            = each.value.repoName
-  import_from_git = true
-
-  git_import_info {
-    branch_name   = "main"
-    file_path     = ".harness/pipeline.yaml"
-    connector_ref = "account.Github"
-    repo_name     = each.value.repoName
-  }
-
-  pipeline_import_request {
-    pipeline_name        = each.value.repoName
-    pipeline_description = "Pipeline for ${each.value.repoName}."
-  }
-}
-
 resource "harness_platform_input_set" "inputset" {
   for_each   = local.new_repos
   depends_on = [harness_platform_pipeline.pipeline]
-
-  identifier      = replace(each.value.repoName, "-", "")
-  org_id          = each.value.orgIdentifier
-  project_id      = each.value.projectIdentifier
-  name            = each.value.repoName
-  pipeline_id     = each.value.repoName
-  import_from_git = true
-
-  git_import_info {
-    branch_name   = "main"
-    file_path     = ".harness/inputset.yaml"
-    connector_ref = "account.Github"
-    repo_name     = each.value.repoName
-  }
-
-  input_set_import_request {
-    input_set_name        = each.value.repoName
-    input_set_description = ""
-  }
-}
-
-resource "harness_platform_input_set" "existing_inputset" {
-  for_each   = local.existing_repos
-  depends_on = [harness_platform_pipeline.existing_pipeline]
 
   identifier      = replace(each.value.repoName, "-", "")
   org_id          = each.value.orgIdentifier
@@ -306,46 +294,6 @@ resource "harness_platform_triggers" "triggers" {
     EOT
 }
 
-resource "harness_platform_triggers" "existing_triggers" {
-  for_each   = local.existing_repos
-  depends_on = [harness_platform_input_set.existing_inputset]
-
-  identifier  = "${replace(each.value.repoName, "-", "")}trigger"
-  org_id      = each.value.orgIdentifier
-  project_id  = each.value.projectIdentifier
-  name        = "${each.value.repoName}-trigger"
-  target_id   = each.value.repoName
-  yaml        = <<-EOT
-  trigger:
-    name: ${each.value.repoName}-trigger
-    identifier: ${replace(each.value.repoName, "-", "")}trigger
-    enabled: true
-    description: ""
-    tags: {}
-    projectIdentifier: ${each.value.projectIdentifier}
-    orgIdentifier: ${each.value.orgIdentifier}
-    pipelineIdentifier: ${each.value.repoName}
-    source:
-      type: Webhook
-      spec:
-        type: Github
-        spec:
-          type: PullRequest
-          spec:
-            connectorRef: account.Github
-            autoAbortPreviousExecutions: false
-            payloadConditions: []
-            headerConditions: []
-            repoName: ${each.value.repoName}
-            actions:
-              - Open
-              - Reopen
-              - Edit
-    pipelineBranchName: <+trigger.branch>
-    inputSetRefs:
-      - "${replace(each.value.repoName, "-", "")}pr"
-    EOT
-}
 
 output "repository_urls" {
   value = [
