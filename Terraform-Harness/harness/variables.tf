@@ -18,6 +18,12 @@ variable "repo_description" {
   default     = "Created from a template repository"
 }
 
+variable "harness_platform_api_key" {
+  description = "Harness Platform API Key (PAT)"
+  type        = string
+  sensitive   = true
+}
+
 variable "repo_private" {
   description = "Whether the repository is private or public"
   type        = bool

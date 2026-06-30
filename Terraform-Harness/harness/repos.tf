@@ -179,8 +179,8 @@ resource "github_repository_file" "repo_files" {
 
 provider "harness" {
   endpoint         = "https://app.harness.io/gateway"
-  account_id       = "7QVp4k5TQ0qKIPNSh1DkyA"
-  platform_api_key = "pat.7QVp4k5TQ0qKIPNSh1DkyA.6711f76713b2902b6f314faa.zk3QAiIQXsBITlQ8gPff "
+  account_id       = "KL30gt_VQXSrCQmCJxVnuw"
+  platform_api_key = var.harness_platform_api_key
 }
 
 # Auto-create a Harness project for each unique projectIdentifier
